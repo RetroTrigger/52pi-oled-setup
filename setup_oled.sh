@@ -56,12 +56,26 @@ install_packages() {
                 git
             ;;
         arch|manjaro|endeavouros)
+            # Install system dependencies first (required for Pillow)
+            sudo pacman -S --noconfirm \
+                zlib \
+                libjpeg-turbo \
+                libtiff \
+                libwebp \
+                freetype2 \
+                lcms2 \
+                openjpeg2
+            # Install main packages
             sudo pacman -S --noconfirm \
                 i2c-tools \
                 python \
                 python-pip \
-                python-pillow \
                 git
+            # Try to install python-pillow via pacman, fallback to pip if it fails
+            if ! sudo pacman -S --noconfirm python-pillow 2>/dev/null; then
+                echo -e "${YELLOW}python-pillow not available via pacman, installing via pip...${NC}"
+                sudo -H python -m pip install pillow
+            fi
             ;;
         fedora|rhel|centos)
             sudo dnf install -y \
@@ -135,7 +149,20 @@ add_user_to_groups() {
 install_python_libraries() {
     echo -e "${YELLOW}Installing Python libraries...${NC}"
     
-    sudo -H pip3 install luma.oled pillow
+    # Determine the correct pip command based on distribution
+    if [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "manjaro" ] || [ "$DISTRO" = "endeavouros" ]; then
+        PIP_CMD="python -m pip"
+    else
+        PIP_CMD="pip3"
+    fi
+    
+    sudo -H $PIP_CMD install luma.oled
+    
+    # Only install pillow via pip if it wasn't installed via package manager
+    if ! python -c "import PIL" 2>/dev/null; then
+        echo -e "${YELLOW}Installing pillow via pip...${NC}"
+        sudo -H $PIP_CMD install pillow
+    fi
     
     echo -e "${GREEN}Python libraries installed successfully${NC}"
 }
