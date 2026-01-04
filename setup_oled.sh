@@ -55,7 +55,7 @@ install_packages() {
                 libtiff5 \
                 git
             ;;
-        arch|manjaro)
+        arch|manjaro|endeavouros)
             sudo pacman -S --noconfirm \
                 i2c-tools \
                 python \
@@ -100,7 +100,7 @@ enable_i2c() {
                 fi
             fi
             ;;
-        arch|manjaro)
+        arch|manjaro|endeavouros)
             # Enable I2C modules
             if ! grep -q "^i2c-dev" /etc/modules-load.d/i2c.conf 2>/dev/null; then
                 echo "i2c-dev" | sudo tee /etc/modules-load.d/i2c.conf
