@@ -152,19 +152,49 @@ install_python_libraries() {
     # Determine the correct pip command based on distribution
     if [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "manjaro" ] || [ "$DISTRO" = "endeavouros" ]; then
         PIP_CMD="python -m pip"
+        # For Arch-based systems, try to install via package manager first
+        if pacman -Qi python-luma-oled &>/dev/null; then
+            echo -e "${GREEN}python-luma-oled already installed via package manager${NC}"
+        elif pacman -Ss python-luma-oled &>/dev/null | grep -q "python-luma-oled"; then
+            echo -e "${YELLOW}Installing python-luma-oled via pacman...${NC}"
+            sudo pacman -S --noconfirm python-luma-oled || {
+                echo -e "${YELLOW}Not available via pacman, installing via pip with --user...${NC}"
+                $PIP_CMD install --user luma.oled
+            }
+        else
+            echo -e "${YELLOW}Installing luma.oled via pip with --user...${NC}"
+            $PIP_CMD install --user luma.oled
+        fi
     else
         PIP_CMD="pip3"
+        # For other distributions, try system-wide first, fallback to --user
+        if ! sudo -H $PIP_CMD install luma.oled 2>&1 | grep -q "externally managed"; then
+            echo -e "${GREEN}luma.oled installed successfully${NC}"
+        else
+            echo -e "${YELLOW}System pip is externally managed, installing with --user...${NC}"
+            $PIP_CMD install --user luma.oled
+        fi
     fi
-    
-    sudo -H $PIP_CMD install luma.oled
     
     # Only install pillow via pip if it wasn't installed via package manager
     if ! python -c "import PIL" 2>/dev/null; then
         echo -e "${YELLOW}Installing pillow via pip...${NC}"
-        sudo -H $PIP_CMD install pillow
+        if [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "manjaro" ] || [ "$DISTRO" = "endeavouros" ]; then
+            $PIP_CMD install --user pillow
+        else
+            if ! sudo -H $PIP_CMD install pillow 2>&1 | grep -q "externally managed"; then
+                echo -e "${GREEN}pillow installed successfully${NC}"
+            else
+                echo -e "${YELLOW}System pip is externally managed, installing with --user...${NC}"
+                $PIP_CMD install --user pillow
+            fi
+        fi
+    else
+        echo -e "${GREEN}pillow already installed${NC}"
     fi
     
     echo -e "${GREEN}Python libraries installed successfully${NC}"
+    echo -e "${YELLOW}Note: Libraries installed with --user are in ~/.local/lib/python*/site-packages${NC}"
 }
 
 # Function to verify display script
@@ -187,6 +217,12 @@ create_systemd_service() {
     
     SERVICE_FILE="/etc/systemd/system/oled_display.service"
     
+    # Determine Python path and version for user site-packages
+    PYTHON3_PATH=$(which python3 || echo "/usr/bin/python3")
+    PYTHON_VERSION=$($PYTHON3_PATH -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "3")
+    USER_HOME=$(eval echo ~$CURRENT_USER)
+    USER_SITE_PACKAGES="${USER_HOME}/.local/lib/python${PYTHON_VERSION}/site-packages"
+    
     sudo tee "$SERVICE_FILE" > /dev/null << EOF
 [Unit]
 Description=52pi Mini Tower OLED Display Service
@@ -194,7 +230,9 @@ After=multi-user.target network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 $SCRIPT_DIR/oled_display.py
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
+Environment="PYTHONPATH=${USER_SITE_PACKAGES}"
+ExecStart=$PYTHON3_PATH $SCRIPT_DIR/oled_display.py
 Restart=always
 RestartSec=10
 User=$CURRENT_USER
