@@ -121,6 +121,26 @@ install_packages() {
     echo -e "${GREEN}Package check completed${NC}"
 }
 
+# Function to configure GPIO permissions
+configure_gpio_permissions() {
+    echo -e "${YELLOW}Configuring GPIO permissions...${NC}"
+    
+    # Add user to gpio group if it exists
+    if getent group gpio > /dev/null 2>&1; then
+        sudo usermod -a -G gpio "$CURRENT_USER"
+        echo -e "${GREEN}User added to gpio group${NC}"
+    fi
+    
+    # For rpi-ws281x, we may need to run as root or use udev rules
+    # Create udev rule for GPIO access (if on Raspberry Pi)
+    if [ -d /sys/class/gpio ]; then
+        echo -e "${YELLOW}Note: rpi-ws281x library requires root access for GPIO/PWM${NC}"
+        echo -e "${YELLOW}The service will run as root for proper hardware access${NC}"
+    fi
+    
+    echo -e "${GREEN}GPIO configuration completed${NC}"
+}
+
 # Function to install Python libraries using virtual environment
 install_python_libraries() {
     # Determine Python command
@@ -311,6 +331,17 @@ create_systemd_service() {
         *) MODE="rainbow" ;;
     esac
     
+    # Create a wrapper script that runs with proper permissions
+    WRAPPER_SCRIPT="$SCRIPT_DIR/fan_control_wrapper.sh"
+    cat > "$WRAPPER_SCRIPT" << WRAPPER_EOF
+#!/bin/bash
+# Wrapper script for LED fan control
+cd $SCRIPT_DIR
+source $VENV_DIR/bin/activate
+exec $VENV_PYTHON $SCRIPT_DIR/fan_control.py $MODE
+WRAPPER_EOF
+    chmod +x "$WRAPPER_SCRIPT"
+    
     sudo tee "$SERVICE_FILE" > /dev/null << EOF
 [Unit]
 Description=52pi Mini Tower LED Fan Service
@@ -318,13 +349,15 @@ After=multi-user.target
 
 [Service]
 Type=simple
-ExecStart=$VENV_PYTHON $SCRIPT_DIR/fan_control.py $MODE
+# Run as root for GPIO access (rpi-ws281x requires root)
+ExecStart=$WRAPPER_SCRIPT
 Restart=always
 RestartSec=10
-User=$CURRENT_USER
 WorkingDirectory=$SCRIPT_DIR
 StandardOutput=journal
 StandardError=journal
+# Set environment for proper GPIO access
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
 
 [Install]
 WantedBy=multi-user.target
@@ -348,6 +381,7 @@ main() {
     
     detect_distro
     install_packages
+    configure_gpio_permissions
     install_python_libraries
     create_fan_script
     create_systemd_service
