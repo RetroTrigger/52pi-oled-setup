@@ -35,55 +35,104 @@ detect_distro() {
     echo "Detected distribution: $DISTRO"
 }
 
+# Function to check if a package is installed (Debian/Ubuntu)
+check_package_deb() {
+    dpkg -l | grep -q "^ii.*$1 " 2>/dev/null
+}
+
+# Function to check if a package is installed (Arch)
+check_package_arch() {
+    pacman -Qi "$1" &>/dev/null
+}
+
+# Function to check if a package is installed (Fedora/RHEL/CentOS)
+check_package_rpm() {
+    rpm -q "$1" &>/dev/null
+}
+
 # Function to install packages based on distribution
 install_packages() {
-    echo -e "${YELLOW}Installing required packages...${NC}"
+    echo -e "${YELLOW}Checking and installing required packages...${NC}"
     
     case $DISTRO in
         debian|ubuntu|raspbian)
-            sudo apt-get update
-            sudo apt-get install -y \
-                i2c-tools \
-                python3 \
-                python3-pip \
-                python3-pil \
-                libjpeg-dev \
-                zlib1g-dev \
-                libfreetype6-dev \
-                liblcms2-dev \
-                libopenjp2-7 \
-                libtiff5 \
-                git
+            # Update package list
+            sudo apt-get update -qq
+            
+            # List of packages to install
+            PACKAGES="i2c-tools python3 python3-pip python3-venv python3-pil libjpeg-dev zlib1g-dev libfreetype6-dev liblcms2-dev libopenjp2-7 libtiff5 git"
+            MISSING_PACKAGES=""
+            
+            for pkg in $PACKAGES; do
+                if ! check_package_deb "$pkg"; then
+                    MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+                else
+                    echo -e "${GREEN}Package $pkg is already installed${NC}"
+                fi
+            done
+            
+            if [ -n "$MISSING_PACKAGES" ]; then
+                echo -e "${YELLOW}Installing missing packages:${MISSING_PACKAGES}${NC}"
+                sudo apt-get install -y $MISSING_PACKAGES
+            else
+                echo -e "${GREEN}All required packages are already installed${NC}"
+            fi
             ;;
         arch|manjaro|endeavouros)
-            # Install system dependencies first (required for Pillow)
-            sudo pacman -S --noconfirm \
-                zlib \
-                libjpeg-turbo \
-                libtiff \
-                libwebp \
-                freetype2 \
-                lcms2 \
-                openjpeg2
-            # Install main packages
-            sudo pacman -S --noconfirm \
-                i2c-tools \
-                python \
-                python-pip \
-                git
-            # Try to install python-pillow via pacman, fallback to pip if it fails
-            if ! sudo pacman -S --noconfirm python-pillow 2>/dev/null; then
-                echo -e "${YELLOW}python-pillow not available via pacman, installing via pip...${NC}"
-                sudo -H python -m pip install pillow
+            # System dependencies for Pillow
+            DEPS="zlib libjpeg-turbo libtiff libwebp freetype2 lcms2 openjpeg2"
+            MISSING_DEPS=""
+            
+            for pkg in $DEPS; do
+                if ! check_package_arch "$pkg"; then
+                    MISSING_DEPS="$MISSING_DEPS $pkg"
+                else
+                    echo -e "${GREEN}Package $pkg is already installed${NC}"
+                fi
+            done
+            
+            if [ -n "$MISSING_DEPS" ]; then
+                echo -e "${YELLOW}Installing missing dependencies:${MISSING_DEPS}${NC}"
+                sudo pacman -S --noconfirm $MISSING_DEPS
+            fi
+            
+            # Main packages
+            MAIN_PACKAGES="i2c-tools python python-pip git"
+            MISSING_MAIN=""
+            
+            for pkg in $MAIN_PACKAGES; do
+                if ! check_package_arch "$pkg"; then
+                    MISSING_MAIN="$MISSING_MAIN $pkg"
+                else
+                    echo -e "${GREEN}Package $pkg is already installed${NC}"
+                fi
+            done
+            
+            if [ -n "$MISSING_MAIN" ]; then
+                echo -e "${YELLOW}Installing missing packages:${MISSING_MAIN}${NC}"
+                sudo pacman -S --noconfirm $MISSING_MAIN
+            else
+                echo -e "${GREEN}All required packages are already installed${NC}"
             fi
             ;;
         fedora|rhel|centos)
-            sudo dnf install -y \
-                i2c-tools \
-                python3 \
-                python3-pip \
-                python3-pillow \
-                git
+            PACKAGES="i2c-tools python3 python3-pip python3-pillow python3-virtualenv git"
+            MISSING_PACKAGES=""
+            
+            for pkg in $PACKAGES; do
+                if ! check_package_rpm "$pkg"; then
+                    MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+                else
+                    echo -e "${GREEN}Package $pkg is already installed${NC}"
+                fi
+            done
+            
+            if [ -n "$MISSING_PACKAGES" ]; then
+                echo -e "${YELLOW}Installing missing packages:${MISSING_PACKAGES}${NC}"
+                sudo dnf install -y $MISSING_PACKAGES
+            else
+                echo -e "${GREEN}All required packages are already installed${NC}"
+            fi
             ;;
         *)
             echo -e "${RED}Unsupported distribution: $DISTRO${NC}"
@@ -92,7 +141,7 @@ install_packages() {
             ;;
     esac
     
-    echo -e "${GREEN}Packages installed successfully${NC}"
+    echo -e "${GREEN}Package check completed${NC}"
 }
 
 # Function to enable I2C
@@ -145,56 +194,54 @@ add_user_to_groups() {
     echo -e "${YELLOW}Note: You may need to log out and back in for group changes to take effect${NC}"
 }
 
-# Function to install Python libraries
+# Function to install Python libraries using virtual environment
 install_python_libraries() {
-    echo -e "${YELLOW}Installing Python libraries...${NC}"
-    
-    # Determine the correct pip command based on distribution
+    # Determine Python command
     if [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "manjaro" ] || [ "$DISTRO" = "endeavouros" ]; then
-        PIP_CMD="python -m pip"
-        # For Arch-based systems, try to install via package manager first
-        if pacman -Qi python-luma-oled &>/dev/null; then
-            echo -e "${GREEN}python-luma-oled already installed via package manager${NC}"
-        elif pacman -Ss python-luma-oled &>/dev/null | grep -q "python-luma-oled"; then
-            echo -e "${YELLOW}Installing python-luma-oled via pacman...${NC}"
-            sudo pacman -S --noconfirm python-luma-oled || {
-                echo -e "${YELLOW}Not available via pacman, installing via pip with --user...${NC}"
-                $PIP_CMD install --user luma.oled
-            }
-        else
-            echo -e "${YELLOW}Installing luma.oled via pip with --user...${NC}"
-            $PIP_CMD install --user luma.oled
-        fi
+        PYTHON_CMD="python"
     else
-        PIP_CMD="pip3"
-        # For other distributions, try system-wide first, fallback to --user
-        if ! sudo -H $PIP_CMD install luma.oled 2>&1 | grep -q "externally managed"; then
-            echo -e "${GREEN}luma.oled installed successfully${NC}"
-        else
-            echo -e "${YELLOW}System pip is externally managed, installing with --user...${NC}"
-            $PIP_CMD install --user luma.oled
-        fi
+        PYTHON_CMD="python3"
     fi
     
-    # Only install pillow via pip if it wasn't installed via package manager
-    if ! python -c "import PIL" 2>/dev/null; then
-        echo -e "${YELLOW}Installing pillow via pip...${NC}"
-        if [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "manjaro" ] || [ "$DISTRO" = "endeavouros" ]; then
-            $PIP_CMD install --user pillow
-        else
-            if ! sudo -H $PIP_CMD install pillow 2>&1 | grep -q "externally managed"; then
-                echo -e "${GREEN}pillow installed successfully${NC}"
-            else
-                echo -e "${YELLOW}System pip is externally managed, installing with --user...${NC}"
-                $PIP_CMD install --user pillow
-            fi
+    # Create venv in script directory
+    VENV_DIR="$SCRIPT_DIR/venv"
+    
+    # Create virtual environment if it doesn't exist
+    if [ ! -d "$VENV_DIR" ]; then
+        echo -e "${YELLOW}Creating Python virtual environment...${NC}"
+        $PYTHON_CMD -m venv "$VENV_DIR"
+        
+        if [ ! -d "$VENV_DIR" ]; then
+            echo -e "${RED}Failed to create virtual environment${NC}"
+            return 1
         fi
+        echo -e "${GREEN}Virtual environment created${NC}"
     else
-        echo -e "${GREEN}pillow already installed${NC}"
+        echo -e "${GREEN}Virtual environment already exists${NC}"
     fi
     
-    echo -e "${GREEN}Python libraries installed successfully${NC}"
-    echo -e "${YELLOW}Note: Libraries installed with --user are in ~/.local/lib/python*/site-packages${NC}"
+    # Activate venv and check/install packages
+    echo -e "${YELLOW}Checking Python libraries in virtual environment...${NC}"
+    source "$VENV_DIR/bin/activate"
+    
+    # Upgrade pip first (only if needed)
+    pip install --upgrade pip --quiet
+    
+    # Check and install packages only if not already installed
+    for pkg in luma.oled pillow; do
+        if pip show "$pkg" &>/dev/null; then
+            echo -e "${GREEN}Package $pkg is already installed${NC}"
+        else
+            echo -e "${YELLOW}Installing $pkg...${NC}"
+            pip install "$pkg"
+        fi
+    done
+    
+    # Deactivate venv
+    deactivate
+    
+    echo -e "${GREEN}Python libraries check completed${NC}"
+    echo -e "${YELLOW}Virtual environment location: $VENV_DIR${NC}"
 }
 
 # Function to verify display script
@@ -217,11 +264,15 @@ create_systemd_service() {
     
     SERVICE_FILE="/etc/systemd/system/oled_display.service"
     
-    # Determine Python path and version for user site-packages
-    PYTHON3_PATH=$(which python3 || echo "/usr/bin/python3")
-    PYTHON_VERSION=$($PYTHON3_PATH -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "3")
-    USER_HOME=$(eval echo ~$CURRENT_USER)
-    USER_SITE_PACKAGES="${USER_HOME}/.local/lib/python${PYTHON_VERSION}/site-packages"
+    # Use Python from virtual environment
+    VENV_DIR="$SCRIPT_DIR/venv"
+    VENV_PYTHON="$VENV_DIR/bin/python"
+    
+    if [ ! -f "$VENV_PYTHON" ]; then
+        echo -e "${RED}Error: Virtual environment not found at $VENV_DIR${NC}"
+        echo "Please run the setup script again to create the virtual environment"
+        return 1
+    fi
     
     sudo tee "$SERVICE_FILE" > /dev/null << EOF
 [Unit]
@@ -231,11 +282,11 @@ After=multi-user.target network.target
 [Service]
 Type=simple
 Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
-Environment="PYTHONPATH=${USER_SITE_PACKAGES}"
-ExecStart=$PYTHON3_PATH $SCRIPT_DIR/oled_display.py
+ExecStart=$VENV_PYTHON $SCRIPT_DIR/oled_display.py
 Restart=always
 RestartSec=10
 User=$CURRENT_USER
+WorkingDirectory=$SCRIPT_DIR
 StandardOutput=journal
 StandardError=journal
 

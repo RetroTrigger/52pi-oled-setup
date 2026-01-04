@@ -10,6 +10,7 @@ Setup scripts for the 0.96-inch OLED display on the 52pi mini tower case for Ras
 ## Features
 
 - **Distro Agnostic**: Works with Debian/Ubuntu, Arch, Fedora, and other Linux distributions
+- **Virtual Environment**: Uses Python virtual environment to avoid "externally managed" errors
 - **System Information Display**: Shows IP address, CPU usage, memory usage, disk usage, and temperature
 - **Custom Messages**: Support for custom text messages via `~/.oled_message.txt`
 - **Auto-start**: Automatically starts on boot via systemd service
@@ -103,9 +104,10 @@ You can modify the following settings in `oled_display.py`:
    sudo journalctl -u oled_display.service -n 50
    ```
 
-3. Test the script directly:
+3. Test the script directly using the virtual environment:
    ```bash
-   python3 oled_display.py
+   source venv/bin/activate
+   python oled_display.py
    ```
 
 ### Permission Issues
@@ -119,10 +121,18 @@ sudo usermod -a -G i2c $USER
 
 ## Requirements
 
-- Python 3
+- Python 3 with venv support
 - I2C interface support
 - Root/sudo access for setup
 - OLED display connected via I2C (typically at address 0x3C)
+
+## Virtual Environment
+
+This setup uses a Python virtual environment located in `venv/` within the script directory. This approach:
+- Avoids "externally managed" Python environment errors
+- Keeps dependencies isolated from system Python packages
+- Works across all Linux distributions
+- The systemd service automatically uses the virtual environment's Python interpreter
 
 ## Display Information
 
