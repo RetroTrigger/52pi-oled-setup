@@ -194,7 +194,7 @@ from rpi_ws281x import PixelStrip, Color
 
 # LED strip configuration
 LED_COUNT = 12          # Number of LED pixels (typical for 52pi fan)
-LED_PIN = 18            # GPIO pin connected to the LED strip (18 = PWM0)
+LED_PIN = 10            # GPIO pin (10 = SPI MOSI, avoids 3.5mm audio noise on GPIO 18)
 LED_FREQ_HZ = 800000    # LED signal frequency in hertz
 LED_DMA = 10            # DMA channel to use
 LED_BRIGHTNESS = 255    # Brightness (0-255)
@@ -358,6 +358,7 @@ StandardOutput=journal
 StandardError=journal
 # Set environment for proper GPIO access
 Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
+User=root
 
 [Install]
 WantedBy=multi-user.target
@@ -366,9 +367,9 @@ EOF
     echo -e "${GREEN}Systemd service created${NC}"
     sudo systemctl daemon-reload
     sudo systemctl enable led_fan.service
+    sudo systemctl start led_fan.service
     
-    echo -e "${GREEN}Service enabled (will start on boot)${NC}"
-    echo -e "${YELLOW}To start the service now, run: sudo systemctl start led_fan.service${NC}"
+    echo -e "${GREEN}Service enabled and started${NC}"
 }
 
 # Main execution

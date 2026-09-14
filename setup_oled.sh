@@ -299,9 +299,9 @@ EOF
     # Reload systemd and enable service
     sudo systemctl daemon-reload
     sudo systemctl enable oled_display.service
+    sudo systemctl start oled_display.service
     
-    echo -e "${GREEN}Service enabled (will start on boot)${NC}"
-    echo -e "${YELLOW}To start the service now, run: sudo systemctl start oled_display.service${NC}"
+    echo -e "${GREEN}Service enabled and started${NC}"
 }
 
 # Function to verify I2C
