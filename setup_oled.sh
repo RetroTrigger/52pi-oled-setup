@@ -60,7 +60,7 @@ install_packages() {
             sudo apt-get update -qq
             
             # List of packages to install
-            PACKAGES="i2c-tools python3 python3-pip python3-venv python3-pil libjpeg-dev zlib1g-dev libfreetype6-dev liblcms2-dev libopenjp2-7 libtiff5 git"
+            PACKAGES="i2c-tools python3 python3-pip python3-venv python3-pil libjpeg-dev zlib1g-dev libfreetype-dev liblcms2-dev libopenjp2-7 libtiff-dev git"
             MISSING_PACKAGES=""
             
             for pkg in $PACKAGES; do
